@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Logo</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px;
+        }
+
+        canvas {
+            border: 1px solid #000;
+            cursor: pointer;
+        }
+
+        .image-container {
+            display: flex;
+            flex-wrap: wrap;
+            margin: 10px 0;
+        }
+
+        .image-container img {
+            width: 100px;
+            height: auto;
+            margin: 5px;
+            cursor: pointer;
+        }
+
+        .awesome-button {
+            background-color: #6200ea;
+            /* Purple background */
+            color: white;
+            /* White text */
+            border: none;
+            /* No border */
+            border-radius: 5px;
+            /* Rounded corners */
+            padding: 12px 20px;
+            /* Padding for size */
+            font-size: 16px;
+            /* Font size */
+            font-weight: bold;
+            /* Bold font */
+            cursor: pointer;
+            /* Pointer cursor */
+            transition: background-color 0.3s, transform 0.2s;
+            /* Smooth transitions */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            /* Subtle shadow */
+        }
+
+        .awesome-button:hover {
+            background-color: #3700b3;
+            /* Darker purple on hover */
+            transform: translateY(-2px);
+            /* Lift effect */
+        }
+
+        .awesome-button:active {
+            transform: translateY(1px);
+            /* Press effect */
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            /* Shadow on press */
+        }
+
+        .awesome-button:focus {
+            outline: none;
+            /* Remove default outline */
+            box-shadow: 0 0 0 3px rgba(98, 0, 234, 0.5);
+            /* Custom focus outline */
+        }
+
+        .button-container{
+            display: flex;
+            gap: 16px;
+        }
+
+        #canvas {
+            margin-top: 32px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Image Distortion</h1>
+    <div class="button-container">
+        <button id="openBackground" class="awesome-button">Open Background Image</button>
+        <button id="openImage" class="awesome-button">Open Image</button>
+        <button id="saveImage" class="awesome-button">Save Image</button>
+    </div>
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <div class="image-container" id="imageContainer"></div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const imageContainer = document.getElementById('imageContainer');
+        let backgroundImage = null;
+        let selectedImage = null;
+        let images = [];
+        let draggingPoint = null;
+        let draggingImage = null;
+        let originalPoint = [];
+        let offsetX, offsetY;
+
+        function isPointInQuadrangle(point, squarePoints) {
+            const [p1, p2, p3, p4] = squarePoints;
+
+            function isLeft(p1, p2, p) {
+                return (p2.x - p1.x) * (p.y - p1.y) - (p2.y - p1.y) * (p.x - p1.x) > 0;
+            }
+
+            return (
+                isLeft(p1, p2, point) &&
+                isLeft(p2, p3, point) &&
+                isLeft(p3, p4, point) &&
+                isLeft(p4, p1, point)
+            );
+        }
+
+        document.getElementById('openBackground').onclick = () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = event => {
+                const file = event.target.files[0];
+                const reader = new FileReader();
+                reader.onload = e => {
+                    backgroundImage = new Image();
+                    backgroundImage.src = e.target.result;
+                    backgroundImage.onload = () => {
+                        draw();
+                    };
+                };
+                reader.readAsDataURL(file);
+            };
+            input.click();
+        };
+
+        document.getElementById('openImage').onclick = () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = event => {
+                const file = event.target.files[0];
+                const reader = new FileReader();
+                reader.onload = e => {
+                    const img = new Image();
+                    img.src = e.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        images.push({ img: canvas, x: 100, y: 100, points: [{ x: 0, y: 0 }, { x: img.width, y: 0 }, { x: img.width, y: img.height }, { x: 0, y: img.height }] });
+                        draw();
+                        addImageToContainer(img);
+                    };
+                };
+                reader.readAsDataURL(file);
+            };
+            input.click();
+        };
+
+        document.getElementById('saveImage').onclick = () => {
+            const link = document.createElement('a');
+            link.href = canvas.toDataURL('image/png');
+            link.download = "image.png";
+            link.click();
+        };
+
+        function addImageToContainer(img) {
+            const imgElement = document.createElement('img');
+            imgElement.src = img.src;
+            imgElement.onclick = () => {
+                selectedImage = img;
+                draw();
+            };
+            imageContainer.appendChild(imgElement);
+        }
+
+        canvas.onmousedown = (e) => {
+            const { offsetX, offsetY } = e;
+            images.forEach(image => {
+                if (isPointInQuadrangle({ x: offsetX, y: offsetY }, image.points)
+                    || isPointNear(image.points[0], offsetX, offsetY)
+                    || isPointNear(image.points[1], offsetX, offsetY)
+                    || isPointNear(image.points[2], offsetX, offsetY)
+                    || isPointNear(image.points[3], offsetX, offsetY)) {
+                    selectedImage = image;
+                    originalPoint = image.points.map(point => ({ x: point.x - offsetX, y: point.y - offsetY }));
+                    draw();
+                }
+            })
+            if (selectedImage) {
+                for (let i = 0; i < selectedImage.points.length; i++) {
+                    const point = selectedImage.points[i];
+                    if (isPointNear(point, offsetX, offsetY)) {
+                        draggingPoint = point;
+                        break;
+                    }
+                }
+            }
+        };
+
+        canvas.onmousemove = (e) => {
+            if (draggingPoint) {
+                draggingPoint.x = e.offsetX;
+                draggingPoint.y = e.offsetY;
+                draw();
+            } else if (selectedImage) {
+                selectedImage.points = selectedImage.points.map((point, index) => ({ x: originalPoint[index].x + e.offsetX, y: originalPoint[index].y + e.offsetY }));
+                draw();
+            }
+        };
+
+        canvas.onmouseup = () => {
+            draggingPoint = null;
+            selectedImage = null;
+        };
+
+        function isPointNear(point, x, y) {
+            return Math.abs(point.x - x) < 10 && Math.abs(point.y - y) < 10;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (backgroundImage) {
+                ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+            }
+            images.forEach(image => {
+                // ctx.drawImage(image.img, 0, 0);
+                drawPerspective(ctx, image.img, image.points);
+            });
+            if (selectedImage) {
+                drawControlPoints(ctx, selectedImage.points);
+            }
+        }
+
+        function drawControlPoints(ctx, points) {
+            ctx.fillStyle = 'red';
+            points.forEach(point => {
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function create_canvas_context(w, h) {
+            var canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            var ctx = canvas.getContext('2d');
+            return ctx;
+        };
+
+        function drawPerspective(ctxd, cvso, points) {
+            if (!cvso) return;
+
+            var d0x = points[0].x;
+            var d0y = points[0].y;
+            var d1x = points[1].x;
+            var d1y = points[1].y;
+            var d2x = points[2].x;
+            var d2y = points[2].y;
+            var d3x = points[3].x;
+            var d3y = points[3].y;
+            //
+            var ow = cvso.width;
+            var oh = cvso.height;
+            //
+            var step = 1;
+            var cover_step = step * 5;
+            //
+            var ctxo = cvso.getContext('2d');;
+            var cvst = document.createElement('canvas');
+            cvst.width = ctxd.canvas.width;
+            cvst.height = ctxd.canvas.height;
+            var ctxt = cvst.getContext('2d');
+            ctxt.clearRect(0, 0, ctxt.canvas.width, ctxt.canvas.height);
+            var ctxl = create_canvas_context(ow, cover_step);
+            ctxl.globalCompositeOperation = "copy";
+            var cvsl = ctxl.canvas;
+            for (var y = 0; y < oh; y += step) {
+                var r = y / oh;
+                var sx = d0x + (d3x - d0x) * r;
+                var sy = d0y + (d3y - d0y) * r;
+                var ex = d1x + (d2x - d1x) * r;
+                var ey = d1y + (d2y - d1y) * r;
+                var ag = Math.atan((ey - sy) / (ex - sx));
+                var sc = Math.sqrt(Math.pow(ex - sx, 2) + Math.pow(ey - sy, 2)) / ow;
+                ctxl.setTransform(1, 0, 0, 1, 0, -y);
+                ctxl.drawImage(ctxo.canvas, 0, 0);
+                //
+                ctxt.translate(sx, sy);
+                ctxt.rotate(ag);
+                ctxt.scale(sc, sc);
+                ctxt.drawImage(cvsl, 0, 0);
+                //
+                ctxt.setTransform(1, 0, 0, 1, 0, 0);
+            }
+
+            ctxd.save();
+            ctxd.beginPath();
+            ctxd.moveTo(points[0].x, points[0].y);
+            for (var i = 1; i < points.length; i++) {
+                ctxd.lineTo(points[i].x, points[i].y);
+            }
+            ctxd.closePath();
+            ctxd.clip();
+            ctxd.drawImage(ctxt.canvas, 0, 0);
+            ctxd.restore();
+        }
+    </script>
+</body>
+
+</html>

@@ -170,8 +170,8 @@
 
         document.getElementById('saveImage').onclick = () => {
             const link = document.createElement('a');
-            link.href = canvas.toDataURL('image/png');
-            link.download = "image.png";
+            link.href = canvas.toDataURL('image/jpg');
+            link.download = "image.jpg";
             link.click();
         };
 
